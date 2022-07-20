@@ -6,17 +6,39 @@ import (
 	"time"
 )
 
-type LogProcess struct {
-	path        string //读取文件路径
-	influxdbDsn string //influxdb的Dsn
-	rc          chan string
-	wc          chan string
+//抽象读取、写入接口
+type Reader interface {
+	Read(chan string) //读方法
 }
 
-func (l *LogProcess) ReadFromFile() {
+type Writer interface {
+	Write(chan string)
+}
+
+type LogProcess struct {
+	rc    chan string
+	wc    chan string
+	read  Reader
+	write Writer
+}
+
+type ReadFromFile struct {
+	path string //读取文件路径
+}
+
+func (r *ReadFromFile) Read(rc chan string) {
 	//读取模块
 	line := "message"
-	l.rc <- line
+	rc <- line
+}
+
+type WriteToInfluxDB struct {
+	influxdbDsn string //influxdb的Dsn
+}
+
+func (w *WriteToInfluxDB) Write(wc chan string) {
+	//写入模块
+	fmt.Println(<-wc)
 }
 
 func (l *LogProcess) LogParse() {
@@ -25,21 +47,20 @@ func (l *LogProcess) LogParse() {
 	l.wc <- strings.ToUpper(data)
 }
 
-func (l *LogProcess) WriteInfluxDB() {
-	//写入模块
-	fmt.Println(<-l.wc)
-}
-
 func main() {
-	lp := &LogProcess{
-		rc: make(chan string),
-		wc: make(chan string),
-		path:        "./access.log",
-		influxdbDsn: "sadfaf",
+	r := &ReadFromFile{
+		path: "./access.log",
 	}
-	go lp.ReadFromFile()
+	w := &WriteToInfluxDB{}
+	lp := &LogProcess{
+		rc:    make(chan string),
+		wc:    make(chan string),
+		read:  r,
+		write: w,
+	}
+	go lp.read.Read(lp.rc)
 	go lp.LogParse()
-	go lp.WriteInfluxDB()
+	go lp.write.Write(lp.wc)
 
 	time.Sleep(time.Second * 1)
 }
